@@ -1,0 +1,6 @@
+{
+  "name": "GoPrime",
+  "description": "Application de commerce et de livraison multi-espaces (Client, Administrateur, Livreur) avec catalogue en CDF, zones de livraison, paiement et notifications WhatsApp.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

@@ -1,0 +1,198 @@
+{
+  "entities": {
+    "AdminMarker": {
+      "title": "AdminMarker",
+      "description": "Server-verified administrator privilege marker",
+      "type": "object",
+      "properties": {
+        "userId": { "type": "string" },
+        "email": { "type": "string" },
+        "createdAt": { "type": "string", "format": "date-time", "description": "Must be written via FieldValue.serverTimestamp()" },
+        "updatedAt": { "type": "string", "format": "date-time", "description": "Must be written via FieldValue.serverTimestamp()" }
+      },
+      "required": ["userId", "email", "createdAt"]
+    },
+    "UserProfile": {
+      "title": "UserProfile",
+      "description": "GoPrime user account with role and delivery contact details",
+      "type": "object",
+      "properties": {
+        "userId": { "type": "string" },
+        "displayName": { "type": "string" },
+        "email": { "type": "string" },
+        "phone": { "type": "string" },
+        "defaultDistrictId": { "type": "string" },
+        "defaultAddress": { "type": "string" },
+        "whatsappPhone": { "type": "string" },
+        "role": { "type": "string", "enum": ["CLIENT", "DRIVER", "ADMIN"] },
+        "active": { "type": "boolean" },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["userId", "displayName", "email", "role", "active", "createdAt", "updatedAt"]
+    },
+    "CartItem": {
+      "title": "CartItem",
+      "description": "Item inside a client shopping cart",
+      "type": "object",
+      "properties": {
+        "productId": { "type": "string" },
+        "productName": { "type": "string" },
+        "unitPriceCdf": { "type": "integer" },
+        "quantity": { "type": "integer" },
+        "imageUrl": { "type": "string" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["productId", "productName", "unitPriceCdf", "quantity", "updatedAt"]
+    },
+    "Category": {
+      "title": "Category",
+      "description": "Catalog category managed by administrators",
+      "type": "object",
+      "properties": {
+        "name": { "type": "string" },
+        "description": { "type": "string" },
+        "sortOrder": { "type": "integer" },
+        "active": { "type": "boolean" },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["name", "sortOrder", "active", "createdAt", "updatedAt"]
+    },
+    "Product": {
+      "title": "Product",
+      "description": "Store product priced in CDF managed exclusively by administrators",
+      "type": "object",
+      "properties": {
+        "name": { "type": "string" },
+        "description": { "type": "string" },
+        "categoryId": { "type": "string" },
+        "categoryName": { "type": "string" },
+        "priceCdf": { "type": "integer" },
+        "stock": { "type": "integer" },
+        "imageUrl": { "type": "string" },
+        "storagePath": { "type": "string" },
+        "featured": { "type": "boolean" },
+        "active": { "type": "boolean" },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["name", "description", "categoryId", "categoryName", "priceCdf", "stock", "featured", "active", "createdAt", "updatedAt"]
+    },
+    "DeliveryZone": {
+      "title": "DeliveryZone",
+      "description": "District or neighborhood delivery zone with CDF delivery fee",
+      "type": "object",
+      "properties": {
+        "name": { "type": "string" },
+        "commune": { "type": "string" },
+        "feeCdf": { "type": "integer" },
+        "estimatedMinutes": { "type": "integer" },
+        "active": { "type": "boolean" },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["name", "commune", "feeCdf", "estimatedMinutes", "active", "createdAt", "updatedAt"]
+    },
+    "Order": {
+      "title": "Order",
+      "description": "Customer order with fulfillment, payment, and WhatsApp notification status",
+      "type": "object",
+      "properties": {
+        "orderNumber": { "type": "string" },
+        "userId": { "type": "string" },
+        "customerName": { "type": "string" },
+        "customerPhone": { "type": "string" },
+        "fulfillmentMode": { "type": "string", "enum": ["DELIVERY", "PICKUP"] },
+        "districtId": { "type": "string" },
+        "districtName": { "type": "string" },
+        "deliveryAddress": { "type": "string" },
+        "items": { "type": "array" },
+        "subtotalCdf": { "type": "integer" },
+        "deliveryFeeCdf": { "type": "integer" },
+        "totalCdf": { "type": "integer" },
+        "paymentMethod": { "type": "string", "enum": ["CASH", "MOBILE_MONEY"] },
+        "paymentProvider": { "type": "string" },
+        "paymentPhone": { "type": "string" },
+        "paymentReference": { "type": "string" },
+        "paymentStatus": { "type": "string", "enum": ["PENDING", "PENDING_VERIFICATION", "PAID", "FAILED"] },
+        "status": { "type": "string", "enum": ["PENDING", "ACCEPTED", "PREPARING", "READY_FOR_PICKUP", "OUT_FOR_DELIVERY", "COMPLETED", "REJECTED", "CANCELLED"] },
+        "assignedDriverId": { "type": "string" },
+        "assignedDriverName": { "type": "string" },
+        "whatsappNotificationStatus": { "type": "string", "enum": ["NOT_CONFIGURED", "PENDING", "SENT", "FAILED"] },
+        "notes": { "type": "string" },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["orderNumber", "userId", "customerName", "customerPhone", "fulfillmentMode", "districtName", "deliveryAddress", "items", "subtotalCdf", "deliveryFeeCdf", "totalCdf", "paymentMethod", "paymentStatus", "status", "whatsappNotificationStatus", "createdAt", "updatedAt"]
+    },
+    "IntegrationSettings": {
+      "title": "IntegrationSettings",
+      "description": "Non-secret administrator configuration for WhatsApp Business API and Mobile Money",
+      "type": "object",
+      "properties": {
+        "enabled": { "type": "boolean" },
+        "adminWhatsappPhones": { "type": "array" },
+        "templateName": { "type": "string" },
+        "languageCode": { "type": "string" },
+        "cloudFunctionEndpoint": { "type": "string" },
+        "mobileMoneyProviderMode": { "type": "string" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["enabled", "updatedAt"]
+    },
+    "NotificationLog": {
+      "title": "NotificationLog",
+      "description": "Audit log of WhatsApp dispatch attempts",
+      "type": "object",
+      "properties": {
+        "orderId": { "type": "string" },
+        "orderNumber": { "type": "string" },
+        "channel": { "type": "string" },
+        "recipient": { "type": "string" },
+        "status": { "type": "string" },
+        "detail": { "type": "string" },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["orderId", "orderNumber", "channel", "recipient", "status", "detail", "createdAt"]
+    }
+  },
+  "firestore": {
+    "/admins/{userId}": {
+      "schema": { "$ref": "#/entities/AdminMarker" },
+      "description": "Administrator privilege markers"
+    },
+    "/users/{userId}": {
+      "schema": { "$ref": "#/entities/UserProfile" },
+      "description": "GoPrime user accounts, roles, and delivery contact details"
+    },
+    "/users/{userId}/cart/{productId}": {
+      "schema": { "$ref": "#/entities/CartItem" },
+      "description": "User-scoped shopping cart items"
+    },
+    "/categories/{categoryId}": {
+      "schema": { "$ref": "#/entities/Category" },
+      "description": "Product categories managed by admins"
+    },
+    "/products/{productId}": {
+      "schema": { "$ref": "#/entities/Product" },
+      "description": "Product catalog managed by admins with CDF pricing"
+    },
+    "/deliveryZones/{zoneId}": {
+      "schema": { "$ref": "#/entities/DeliveryZone" },
+      "description": "Delivery neighborhoods/zones with CDF fees"
+    },
+    "/orders/{orderId}": {
+      "schema": { "$ref": "#/entities/Order" },
+      "description": "Customer orders, fulfillment workflow, payment status, and driver assignment"
+    },
+    "/settings/{settingId}": {
+      "schema": { "$ref": "#/entities/IntegrationSettings" },
+      "description": "Admin-only WhatsApp and payment integration settings"
+    },
+    "/notificationLogs/{logId}": {
+      "schema": { "$ref": "#/entities/NotificationLog" },
+      "description": "Admin-only WhatsApp notification audit trail"
+    }
+  }
+}

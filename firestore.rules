@@ -1,0 +1,404 @@
+rules_version = '2';
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // Global safety net: deny everything by default
+    match /{document=**} {
+      allow read, write: if false;
+    }
+
+    // --- GLOBAL HARDENED HELPERS ---
+    function isValidId(id) {
+      return id is string && id.size() >= 1 && id.size() <= 128 && id.matches('^[a-zA-Z0-9_\\-]+$');
+    }
+
+    function incoming() {
+      return request.resource.data;
+    }
+
+    function existing() {
+      return resource.data;
+    }
+
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function isOwner(userId) {
+      return isSignedIn() && request.auth.uid == userId;
+    }
+
+    function isBootstrappedAdmin() {
+      return isSignedIn() &&
+        request.auth.token.email_verified == true &&
+        request.auth.token.email == 'alherilionel338@gmail.com';
+    }
+
+    function isAdmin() {
+      return isBootstrappedAdmin() || (
+        isSignedIn() &&
+        exists(/databases/$(database)/documents/admins/$(request.auth.uid)) &&
+        (!exists(/databases/$(database)/documents/users/$(request.auth.uid)) ||
+         get(/databases/$(database)/documents/users/$(request.auth.uid)).data.active == true)
+      );
+    }
+
+    // --- VALIDATION BLUEPRINTS ---
+    function isValidAdminMarker(data) {
+      return data.userId is string && data.userId.size() >= 1 && data.userId.size() <= 128 &&
+        data.email is string && data.email.size() >= 3 && data.email.size() <= 120 &&
+        data.createdAt is timestamp && data.createdAt <= request.time &&
+        (!('updatedAt' in data) || (data.updatedAt is timestamp && data.updatedAt <= request.time));
+    }
+
+    function isValidUser(data) {
+      return data.userId is string && data.userId.size() >= 1 && data.userId.size() <= 128 &&
+        data.displayName is string && data.displayName.size() >= 1 && data.displayName.size() <= 80 &&
+        data.email is string && data.email.size() <= 120 &&
+        (!('phone' in data) || (data.phone is string && data.phone.size() <= 24)) &&
+        (!('defaultDistrictId' in data) || (data.defaultDistrictId is string && data.defaultDistrictId.size() <= 128)) &&
+        (!('defaultAddress' in data) || (data.defaultAddress is string && data.defaultAddress.size() <= 240)) &&
+        (!('whatsappPhone' in data) || (data.whatsappPhone is string && data.whatsappPhone.size() <= 24)) &&
+        data.role in ['CLIENT', 'DRIVER', 'ADMIN'] &&
+        data.active is bool &&
+        data.createdAt is timestamp && data.createdAt <= request.time &&
+        data.updatedAt is timestamp && data.updatedAt <= request.time;
+    }
+
+    function isValidCartItem(data) {
+      return data.productId is string && data.productId.size() >= 1 && data.productId.size() <= 128 &&
+        data.productName is string && data.productName.size() >= 1 && data.productName.size() <= 120 &&
+        data.unitPriceCdf is int && data.unitPriceCdf >= 0 && data.unitPriceCdf <= 1000000000 &&
+        data.quantity is int && data.quantity >= 1 && data.quantity <= 99 &&
+        (!('imageUrl' in data) || (data.imageUrl is string && data.imageUrl.size() <= 500)) &&
+        data.updatedAt is timestamp && data.updatedAt <= request.time;
+    }
+
+    function isValidCategory(data) {
+      return data.name is string && data.name.size() >= 1 && data.name.size() <= 60 &&
+        (!('description' in data) || (data.description is string && data.description.size() <= 200)) &&
+        data.sortOrder is int && data.sortOrder >= 0 && data.sortOrder <= 10000 &&
+        data.active is bool &&
+        data.createdAt is timestamp && data.createdAt <= request.time &&
+        data.updatedAt is timestamp && data.updatedAt <= request.time;
+    }
+
+    function isValidProduct(data) {
+      return data.name is string && data.name.size() >= 1 && data.name.size() <= 120 &&
+        data.description is string && data.description.size() <= 1000 &&
+        data.categoryId is string && data.categoryId.size() >= 1 && data.categoryId.size() <= 128 &&
+        data.categoryName is string && data.categoryName.size() >= 1 && data.categoryName.size() <= 60 &&
+        data.priceCdf is int && data.priceCdf > 0 && data.priceCdf <= 1000000000 &&
+        data.stock is int && data.stock >= 0 && data.stock <= 1000000 &&
+        (!('imageUrl' in data) || (data.imageUrl is string && data.imageUrl.size() <= 500)) &&
+        (!('storagePath' in data) || (data.storagePath is string && data.storagePath.size() <= 300)) &&
+        data.featured is bool &&
+        data.active is bool &&
+        data.createdAt is timestamp && data.createdAt <= request.time &&
+        data.updatedAt is timestamp && data.updatedAt <= request.time;
+    }
+
+    function isValidDeliveryZone(data) {
+      return data.name is string && data.name.size() >= 1 && data.name.size() <= 80 &&
+        data.commune is string && data.commune.size() >= 1 && data.commune.size() <= 80 &&
+        data.feeCdf is int && data.feeCdf >= 0 && data.feeCdf <= 10000000 &&
+        data.estimatedMinutes is int && data.estimatedMinutes >= 5 && data.estimatedMinutes <= 1440 &&
+        data.active is bool &&
+        data.createdAt is timestamp && data.createdAt <= request.time &&
+        data.updatedAt is timestamp && data.updatedAt <= request.time;
+    }
+
+    function isValidOrder(data) {
+      return data.orderNumber is string && data.orderNumber.size() >= 3 && data.orderNumber.size() <= 32 &&
+        data.userId is string && data.userId.size() >= 1 && data.userId.size() <= 128 &&
+        data.customerName is string && data.customerName.size() >= 1 && data.customerName.size() <= 80 &&
+        data.customerPhone is string && data.customerPhone.size() >= 4 && data.customerPhone.size() <= 24 &&
+        data.fulfillmentMode in ['DELIVERY', 'PICKUP'] &&
+        (!('districtId' in data) || (data.districtId is string && data.districtId.size() <= 128)) &&
+        data.districtName is string && data.districtName.size() >= 1 && data.districtName.size() <= 80 &&
+        data.deliveryAddress is string && data.deliveryAddress.size() >= 1 && data.deliveryAddress.size() <= 240 &&
+        data.items is list && data.items.size() >= 1 && data.items.size() <= 50 && data.items[0] is map &&
+        data.subtotalCdf is int && data.subtotalCdf > 0 && data.subtotalCdf <= 1000000000 &&
+        data.deliveryFeeCdf is int && data.deliveryFeeCdf >= 0 && data.deliveryFeeCdf <= 10000000 &&
+        data.totalCdf is int && data.totalCdf == data.subtotalCdf + data.deliveryFeeCdf &&
+        data.paymentMethod in ['CASH', 'MOBILE_MONEY'] &&
+        (!('paymentProvider' in data) || (data.paymentProvider is string && data.paymentProvider.size() <= 40)) &&
+        (!('paymentPhone' in data) || (data.paymentPhone is string && data.paymentPhone.size() <= 24)) &&
+        (!('paymentReference' in data) || (data.paymentReference is string && data.paymentReference.size() <= 80)) &&
+        data.paymentStatus in ['PENDING', 'PENDING_VERIFICATION', 'PAID', 'FAILED'] &&
+        data.status in ['PENDING', 'ACCEPTED', 'PREPARING', 'READY_FOR_PICKUP', 'OUT_FOR_DELIVERY', 'COMPLETED', 'REJECTED', 'CANCELLED'] &&
+        (!('assignedDriverId' in data) || (data.assignedDriverId is string && data.assignedDriverId.size() <= 128)) &&
+        (!('assignedDriverName' in data) || (data.assignedDriverName is string && data.assignedDriverName.size() <= 80)) &&
+        data.whatsappNotificationStatus in ['NOT_CONFIGURED', 'PENDING', 'SENT', 'FAILED'] &&
+        (!('customerWhatsappStatus' in data) || data.customerWhatsappStatus in ['NOT_CONFIGURED', 'PENDING', 'SENT', 'FAILED']) &&
+        (!('notes' in data) || (data.notes is string && data.notes.size() <= 300)) &&
+        data.createdAt is timestamp && data.createdAt <= request.time &&
+        data.updatedAt is timestamp && data.updatedAt <= request.time;
+    }
+
+    function isValidSettings(data) {
+      return data.enabled is bool &&
+        (!('adminWhatsappPhones' in data) || (data.adminWhatsappPhones is list && data.adminWhatsappPhones.size() <= 20 && (data.adminWhatsappPhones.size() == 0 || data.adminWhatsappPhones[0] is string))) &&
+        (!('notifyCustomerOnOrder' in data) || data.notifyCustomerOnOrder is bool) &&
+        (!('templateName' in data) || (data.templateName is string && data.templateName.size() <= 80)) &&
+        (!('customerTemplateName' in data) || (data.customerTemplateName is string && data.customerTemplateName.size() <= 80)) &&
+        (!('languageCode' in data) || (data.languageCode is string && data.languageCode.size() <= 16)) &&
+        (!('cloudFunctionEndpoint' in data) || (data.cloudFunctionEndpoint is string && data.cloudFunctionEndpoint.size() <= 300)) &&
+        (!('mobileMoneyProviderMode' in data) || (data.mobileMoneyProviderMode is string && data.mobileMoneyProviderMode.size() <= 80)) &&
+        data.updatedAt is timestamp && data.updatedAt <= request.time;
+    }
+
+    function isValidNotificationLog(data) {
+      return data.orderId is string && data.orderId.size() >= 1 && data.orderId.size() <= 128 &&
+        data.orderNumber is string && data.orderNumber.size() >= 1 && data.orderNumber.size() <= 32 &&
+        data.channel is string && data.channel.size() >= 1 && data.channel.size() <= 40 &&
+        (!('recipientRole' in data) || data.recipientRole in ['ADMIN', 'CLIENT']) &&
+        data.recipient is string && data.recipient.size() >= 1 && data.recipient.size() <= 40 &&
+        data.status is string && data.status.size() >= 1 && data.status.size() <= 40 &&
+        data.detail is string && data.detail.size() <= 400 &&
+        data.createdAt is timestamp && data.createdAt <= request.time;
+    }
+
+    function isValidOrderReview(data) {
+      return data.orderId is string && data.orderId.size() >= 1 && data.orderId.size() <= 128 &&
+        data.orderNumber is string && data.orderNumber.size() >= 3 && data.orderNumber.size() <= 32 &&
+        data.userId is string && data.userId.size() >= 1 && data.userId.size() <= 128 &&
+        data.customerName is string && data.customerName.size() >= 1 && data.customerName.size() <= 80 &&
+        data.productIds is list && data.productIds.size() >= 1 && data.productIds.size() <= 50 &&
+        data.productRating is int && data.productRating >= 1 && data.productRating <= 5 &&
+        data.deliveryRating is int && data.deliveryRating >= 1 && data.deliveryRating <= 5 &&
+        data.comment is string && data.comment.size() <= 500 &&
+        data.createdAt is timestamp && data.createdAt <= request.time &&
+        data.updatedAt is timestamp && data.updatedAt <= request.time;
+    }
+
+    // --- COLLECTION RULES ---
+
+    match /admins/{userId} {
+      allow get: if isSignedIn() && isValidId(userId) && (request.auth.uid == userId || isAdmin());
+      allow list: if isAdmin();
+      allow create: if isAdmin() &&
+                       isValidId(userId) &&
+                       incoming().userId == userId &&
+                       incoming().keys().hasAll(['userId', 'email', 'createdAt']) &&
+                       incoming().keys().hasOnly(['userId', 'email', 'createdAt', 'updatedAt']) &&
+                       isValidAdminMarker(incoming());
+      allow update: if isAdmin() &&
+                       isValidId(userId) &&
+                       isValidAdminMarker(incoming()) &&
+                       incoming().userId == existing().userId &&
+                       incoming().createdAt == existing().createdAt &&
+                       incoming().diff(existing()).affectedKeys().hasOnly(['email', 'updatedAt']);
+      allow delete: if isAdmin() && isValidId(userId);
+    }
+
+    match /users/{userId} {
+      allow get: if isSignedIn() && isValidId(userId) && (request.auth.uid == userId || isAdmin());
+      allow list: if isAdmin();
+
+      allow create: if isSignedIn() &&
+                       isValidId(userId) &&
+                       incoming().userId == userId &&
+                       incoming().keys().hasAll(['userId', 'displayName', 'email', 'role', 'active', 'createdAt', 'updatedAt']) &&
+                       incoming().keys().hasOnly(['userId', 'displayName', 'email', 'phone', 'defaultDistrictId', 'defaultAddress', 'whatsappPhone', 'role', 'active', 'createdAt', 'updatedAt']) &&
+                       isValidUser(incoming()) &&
+                       (isAdmin() || (request.auth.uid == userId && incoming().role == 'CLIENT' && incoming().active == true));
+
+      allow update: if isSignedIn() &&
+                       isValidId(userId) &&
+                       isValidUser(incoming()) &&
+                       incoming().userId == existing().userId &&
+                       incoming().createdAt == existing().createdAt && (
+                         (isAdmin() && incoming().diff(existing()).affectedKeys().hasOnly(['displayName', 'email', 'phone', 'defaultDistrictId', 'defaultAddress', 'whatsappPhone', 'role', 'active', 'updatedAt'])) ||
+                         (request.auth.uid == userId &&
+                          incoming().role == existing().role &&
+                          incoming().active == existing().active &&
+                          incoming().diff(existing()).affectedKeys().hasOnly(['displayName', 'phone', 'defaultDistrictId', 'defaultAddress', 'updatedAt']))
+                       );
+
+      allow delete: if isAdmin() && isValidId(userId);
+
+      match /cart/{productId} {
+        allow get: if isOwner(userId) && isValidId(productId);
+        allow list: if isOwner(userId);
+        allow create, update: if isOwner(userId) &&
+                                 isValidId(productId) &&
+                                 incoming().productId == productId &&
+                                 incoming().keys().hasAll(['productId', 'productName', 'unitPriceCdf', 'quantity', 'updatedAt']) &&
+                                 incoming().keys().hasOnly(['productId', 'productName', 'unitPriceCdf', 'quantity', 'imageUrl', 'updatedAt']) &&
+                                 isValidCartItem(incoming());
+        allow delete: if isOwner(userId) && isValidId(productId);
+      }
+    }
+
+    match /categories/{categoryId} {
+      allow get: if isSignedIn() && isValidId(categoryId) && (existing().active == true || isAdmin());
+      allow list: if isSignedIn() && (existing().active == true || isAdmin());
+      allow create: if isAdmin() &&
+                       isValidId(categoryId) &&
+                       incoming().keys().hasAll(['name', 'sortOrder', 'active', 'createdAt', 'updatedAt']) &&
+                       incoming().keys().hasOnly(['name', 'description', 'sortOrder', 'active', 'createdAt', 'updatedAt']) &&
+                       isValidCategory(incoming());
+      allow update: if isAdmin() &&
+                       isValidId(categoryId) &&
+                       isValidCategory(incoming()) &&
+                       incoming().createdAt == existing().createdAt &&
+                       incoming().diff(existing()).affectedKeys().hasOnly(['name', 'description', 'sortOrder', 'active', 'updatedAt']);
+      allow delete: if isAdmin() && isValidId(categoryId);
+    }
+
+    match /products/{productId} {
+      allow get: if isSignedIn() && isValidId(productId) && (existing().active == true || isAdmin());
+      allow list: if isSignedIn() && (existing().active == true || isAdmin());
+      allow create: if isAdmin() &&
+                       isValidId(productId) &&
+                       incoming().keys().hasAll(['name', 'description', 'categoryId', 'categoryName', 'priceCdf', 'stock', 'featured', 'active', 'createdAt', 'updatedAt']) &&
+                       incoming().keys().hasOnly(['name', 'description', 'categoryId', 'categoryName', 'priceCdf', 'stock', 'imageUrl', 'storagePath', 'featured', 'active', 'createdAt', 'updatedAt']) &&
+                       isValidProduct(incoming()) &&
+                       exists(/databases/$(database)/documents/categories/$(incoming().categoryId));
+      allow update: if isAdmin() &&
+                       isValidId(productId) &&
+                       isValidProduct(incoming()) &&
+                       incoming().createdAt == existing().createdAt &&
+                       incoming().diff(existing()).affectedKeys().hasOnly(['name', 'description', 'categoryId', 'categoryName', 'priceCdf', 'stock', 'imageUrl', 'storagePath', 'featured', 'active', 'updatedAt']);
+      allow delete: if isAdmin() && isValidId(productId);
+    }
+
+    match /deliveryZones/{zoneId} {
+      allow get: if isSignedIn() && isValidId(zoneId) && (existing().active == true || isAdmin());
+      allow list: if isSignedIn() && (existing().active == true || isAdmin());
+      allow create: if isAdmin() &&
+                       isValidId(zoneId) &&
+                       incoming().keys().hasAll(['name', 'commune', 'feeCdf', 'estimatedMinutes', 'active', 'createdAt', 'updatedAt']) &&
+                       incoming().keys().hasOnly(['name', 'commune', 'feeCdf', 'estimatedMinutes', 'active', 'createdAt', 'updatedAt']) &&
+                       isValidDeliveryZone(incoming());
+      allow update: if isAdmin() &&
+                       isValidId(zoneId) &&
+                       isValidDeliveryZone(incoming()) &&
+                       incoming().createdAt == existing().createdAt &&
+                       incoming().diff(existing()).affectedKeys().hasOnly(['name', 'commune', 'feeCdf', 'estimatedMinutes', 'active', 'updatedAt']);
+      allow delete: if isAdmin() && isValidId(zoneId);
+    }
+
+    match /orders/{orderId} {
+      allow get: if isSignedIn() && isValidId(orderId) && (
+        existing().userId == request.auth.uid ||
+        ('assignedDriverId' in existing() && existing().assignedDriverId == request.auth.uid) ||
+        isAdmin()
+      );
+      allow list: if isSignedIn() && (
+        existing().userId == request.auth.uid ||
+        ('assignedDriverId' in existing() && existing().assignedDriverId == request.auth.uid) ||
+        isAdmin()
+      );
+
+      allow create: if isSignedIn() &&
+                       isValidId(orderId) &&
+                       incoming().userId == request.auth.uid &&
+                       incoming().status == 'PENDING' &&
+                       incoming().paymentStatus in ['PENDING', 'PENDING_VERIFICATION'] &&
+                       incoming().whatsappNotificationStatus == 'PENDING' &&
+                       (!('customerWhatsappStatus' in incoming()) || incoming().customerWhatsappStatus == 'PENDING') &&
+                       !('assignedDriverId' in incoming()) &&
+                       !('assignedDriverName' in incoming()) &&
+                       incoming().keys().hasAll(['orderNumber', 'userId', 'customerName', 'customerPhone', 'fulfillmentMode', 'districtName', 'deliveryAddress', 'items', 'subtotalCdf', 'deliveryFeeCdf', 'totalCdf', 'paymentMethod', 'paymentStatus', 'status', 'whatsappNotificationStatus', 'createdAt', 'updatedAt']) &&
+                       incoming().keys().hasOnly(['orderNumber', 'userId', 'customerName', 'customerPhone', 'fulfillmentMode', 'districtId', 'districtName', 'deliveryAddress', 'items', 'subtotalCdf', 'deliveryFeeCdf', 'totalCdf', 'paymentMethod', 'paymentProvider', 'paymentPhone', 'paymentReference', 'paymentStatus', 'status', 'whatsappNotificationStatus', 'customerWhatsappStatus', 'notes', 'createdAt', 'updatedAt']) &&
+                       isValidOrder(incoming()) &&
+                       (
+                         (incoming().fulfillmentMode == 'PICKUP' && incoming().deliveryFeeCdf == 0) ||
+                         (incoming().fulfillmentMode == 'DELIVERY' &&
+                          'districtId' in incoming() &&
+                          incoming().districtId.size() > 0 &&
+                          exists(/databases/$(database)/documents/deliveryZones/$(incoming().districtId)) &&
+                          incoming().deliveryFeeCdf == get(/databases/$(database)/documents/deliveryZones/$(incoming().districtId)).data.feeCdf)
+                       );
+
+      allow update: if isSignedIn() &&
+                       isValidId(orderId) &&
+                       isValidOrder(incoming()) &&
+                       incoming().userId == existing().userId &&
+                       incoming().createdAt == existing().createdAt &&
+                       incoming().orderNumber == existing().orderNumber &&
+                       incoming().subtotalCdf == existing().subtotalCdf &&
+                       incoming().deliveryFeeCdf == existing().deliveryFeeCdf &&
+                       incoming().totalCdf == existing().totalCdf &&
+                       incoming().paymentMethod == existing().paymentMethod && (
+                         (isAdmin() && incoming().diff(existing()).affectedKeys().hasOnly(['status', 'assignedDriverId', 'assignedDriverName', 'paymentStatus', 'whatsappNotificationStatus', 'customerWhatsappStatus', 'notes', 'updatedAt'])) ||
+                         (existing().userId == request.auth.uid &&
+                          existing().status == 'PENDING' &&
+                          incoming().status == 'CANCELLED' &&
+                          incoming().diff(existing()).affectedKeys().hasOnly(['status', 'updatedAt'])) ||
+                         ('assignedDriverId' in existing() &&
+                          existing().assignedDriverId == request.auth.uid &&
+                          !(existing().status in ['COMPLETED', 'REJECTED', 'CANCELLED']) && (
+                            (existing().status in ['ACCEPTED', 'PREPARING', 'READY_FOR_PICKUP'] &&
+                             incoming().status == 'OUT_FOR_DELIVERY' &&
+                             incoming().diff(existing()).affectedKeys().hasOnly(['status', 'updatedAt'])) ||
+                            (existing().status == 'OUT_FOR_DELIVERY' &&
+                             incoming().status == 'COMPLETED' && (
+                               incoming().diff(existing()).affectedKeys().hasOnly(['status', 'updatedAt']) ||
+                               (existing().paymentMethod == 'CASH' &&
+                                incoming().paymentStatus == 'PAID' &&
+                                incoming().diff(existing()).affectedKeys().hasOnly(['status', 'paymentStatus', 'updatedAt']))
+                             ))
+                          ))
+                       );
+
+      allow delete: if isAdmin() && isValidId(orderId);
+    }
+
+    match /settings/{settingId} {
+      allow get: if isAdmin() && isValidId(settingId);
+      allow list: if isAdmin();
+      allow create, update: if isAdmin() &&
+                               isValidId(settingId) &&
+                               incoming().keys().hasAll(['enabled', 'updatedAt']) &&
+                               incoming().keys().hasOnly(['enabled', 'adminWhatsappPhones', 'notifyCustomerOnOrder', 'templateName', 'customerTemplateName', 'languageCode', 'cloudFunctionEndpoint', 'mobileMoneyProviderMode', 'updatedAt']) &&
+                               isValidSettings(incoming());
+      allow delete: if isAdmin() && isValidId(settingId);
+    }
+
+    match /notificationLogs/{logId} {
+      allow get: if isAdmin() && isValidId(logId);
+      allow list: if isAdmin();
+      allow create: if isAdmin() &&
+                       isValidId(logId) &&
+                       incoming().keys().hasAll(['orderId', 'orderNumber', 'channel', 'recipient', 'status', 'detail', 'createdAt']) &&
+                       incoming().keys().hasOnly(['orderId', 'orderNumber', 'channel', 'recipientRole', 'recipient', 'status', 'detail', 'createdAt']) &&
+                       isValidNotificationLog(incoming());
+      allow update: if isAdmin() &&
+                       isValidId(logId) &&
+                       isValidNotificationLog(incoming()) &&
+                       incoming().createdAt == existing().createdAt &&
+                       incoming().diff(existing()).affectedKeys().hasOnly(['status', 'detail']);
+      allow delete: if isAdmin() && isValidId(logId);
+    }
+
+    match /reviews/{reviewId} {
+      allow get: if isSignedIn() && isValidId(reviewId);
+      allow list: if isSignedIn();
+      allow create: if isSignedIn() &&
+                       isValidId(reviewId) &&
+                       incoming().orderId == reviewId &&
+                       incoming().userId == request.auth.uid &&
+                       incoming().keys().hasAll(['orderId', 'orderNumber', 'userId', 'customerName', 'productIds', 'productRating', 'deliveryRating', 'comment', 'createdAt', 'updatedAt']) &&
+                       incoming().keys().hasOnly(['orderId', 'orderNumber', 'userId', 'customerName', 'productIds', 'productRating', 'deliveryRating', 'comment', 'createdAt', 'updatedAt']) &&
+                       isValidOrderReview(incoming()) &&
+                       exists(/databases/$(database)/documents/orders/$(reviewId)) &&
+                       get(/databases/$(database)/documents/orders/$(reviewId)).data.userId == request.auth.uid &&
+                       get(/databases/$(database)/documents/orders/$(reviewId)).data.status == 'COMPLETED';
+      allow update: if isSignedIn() &&
+                       isValidId(reviewId) &&
+                       existing().userId == request.auth.uid &&
+                       isValidOrderReview(incoming()) &&
+                       incoming().orderId == existing().orderId &&
+                       incoming().orderNumber == existing().orderNumber &&
+                       incoming().userId == existing().userId &&
+                       incoming().productIds == existing().productIds &&
+                       incoming().createdAt == existing().createdAt &&
+                       incoming().diff(existing()).affectedKeys().hasOnly(['productRating', 'deliveryRating', 'comment', 'customerName', 'updatedAt']);
+      allow delete: if isAdmin() && isValidId(reviewId);
+    }
+  }
+}

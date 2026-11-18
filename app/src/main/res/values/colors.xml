@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <color name="goprime_navy">#FF031E6E</color>
+    <color name="goprime_cobalt">#FF1A4AC4</color>
+    <color name="goprime_silver_start">#FFB8BBC2</color>
+    <color name="goprime_silver_bg">#FFEBEEF5</color>
+    <color name="black">#FF000000</color>
+    <color name="white">#FFFFFFFF</color>
+</resources>
