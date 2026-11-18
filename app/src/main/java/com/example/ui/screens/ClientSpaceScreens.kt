@@ -1,5 +1,6 @@
 package com.example.ui.screens
 
+import android.widget.Toast
 import androidx.activity.compose.BackHandler
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.foundation.BorderStroke
@@ -30,6 +31,7 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.Logout
+import androidx.compose.material.icons.automirrored.filled.Send
 import androidx.compose.material.icons.automirrored.filled.Sort
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.AddShoppingCart
@@ -87,6 +89,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
@@ -96,6 +99,7 @@ import coil.compose.AsyncImage
 import com.example.R
 import com.example.data.model.CartItem
 import com.example.data.model.Category
+import com.example.data.model.DEFAULT_ADMIN_WHATSAPP_PHONE
 import com.example.data.model.DeliveryStatusCategory
 import com.example.data.model.DeliveryZone
 import com.example.data.model.FulfillmentMode
@@ -127,6 +131,7 @@ import com.example.ui.state.CatalogSortOption
 import com.example.ui.state.GoPrimeViewModel
 import com.example.ui.state.UiState
 import com.example.ui.theme.StatusWarning
+import com.example.util.WhatsAppIntentService
 import java.util.Locale
 
 @Composable
@@ -868,6 +873,7 @@ fun ClientCartAndCheckoutScreen(
     viewModel: GoPrimeViewModel,
     onOrderPlacedNavigate: () -> Unit
 ) {
+    val context = LocalContext.current
     val cartItems = (cartState as? UiState.Success)?.data.orEmpty()
     val productsById = ((productsState as? UiState.Success)?.data.orEmpty()).associateBy { it.id }
     val zones = (zonesState as? UiState.Success)?.data.orEmpty()
@@ -1341,6 +1347,52 @@ fun ClientCartAndCheckoutScreen(
                             else "Confirmer la commande • ${formatCdf(totalCdf)}"
                         )
                     }
+
+                    OutlinedButton(
+                        onClick = {
+                            val distName = if (fulfillmentMode == FulfillmentMode.PICKUP) {
+                                "Point de retrait GoPrime"
+                            } else {
+                                selectedZone?.name.orEmpty()
+                            }
+                            WhatsAppIntentService.sendCheckoutSummaryToAppWhatsApp(
+                                context = context,
+                                customerName = customerName,
+                                customerPhone = customerPhone,
+                                fulfillmentMode = fulfillmentMode,
+                                districtName = distName,
+                                deliveryAddress = deliveryAddress,
+                                paymentMethod = paymentMethod,
+                                paymentProvider = paymentProvider,
+                                paymentPhone = paymentPhone,
+                                paymentReference = paymentReference,
+                                notes = notes,
+                                cartItems = cartItems,
+                                subtotalCdf = subtotalCdf,
+                                deliveryFeeCdf = deliveryFeeCdf,
+                                totalCdf = totalCdf
+                            ).onFailure { err ->
+                                Toast.makeText(
+                                    context,
+                                    err.localizedMessage ?: "Impossible d'ouvrir WhatsApp.",
+                                    Toast.LENGTH_SHORT
+                                ).show()
+                            }
+                        },
+                        enabled = cartItems.isNotEmpty(),
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .heightIn(min = 48.dp)
+                            .testTag("checkout_whatsapp_intent_button")
+                    ) {
+                        Icon(
+                            imageVector = Icons.AutoMirrored.Filled.Send,
+                            contentDescription = null,
+                            modifier = Modifier.size(18.dp)
+                        )
+                        Spacer(Modifier.width(8.dp))
+                        Text("Envoyer les détails sur WhatsApp ($DEFAULT_ADMIN_WHATSAPP_PHONE)")
+                    }
                 }
             }
         }
@@ -1683,6 +1735,7 @@ private fun CustomerOrderCard(
     onRequestCancel: () -> Unit,
     onRequestReview: () -> Unit
 ) {
+    val context = LocalContext.current
     val category = order.deliveryStatusCategory
     var expanded by remember(order.id) {
         mutableStateOf(category == DeliveryStatusCategory.IN_PROGRESS)
@@ -2005,6 +2058,34 @@ private fun CustomerOrderCard(
                         Text("Évaluer produits & livraison")
                     }
                 }
+            }
+
+            OutlinedButton(
+                onClick = {
+                    WhatsAppIntentService.sendOrderDetailsToAppWhatsApp(
+                        context = context,
+                        order = order
+                    ).onFailure { err ->
+                        Toast.makeText(
+                            context,
+                            err.localizedMessage ?: "Impossible d'ouvrir WhatsApp.",
+                            Toast.LENGTH_SHORT
+                        ).show()
+                    }
+                },
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .heightIn(min = 48.dp)
+                    .testTag("order_whatsapp_intent_${order.id}")
+            ) {
+                Icon(
+                    imageVector = Icons.AutoMirrored.Filled.Send,
+                    contentDescription = null,
+                    modifier = Modifier.size(18.dp),
+                    tint = MaterialTheme.colorScheme.primary
+                )
+                Spacer(Modifier.width(8.dp))
+                Text("Envoyer sur WhatsApp ($DEFAULT_ADMIN_WHATSAPP_PHONE)")
             }
 
             if (order.parsedStatus == OrderStatus.PENDING) {

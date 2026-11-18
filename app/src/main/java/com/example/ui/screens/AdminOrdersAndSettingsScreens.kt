@@ -2,6 +2,7 @@ package com.example.ui.screens
 
 import android.content.Intent
 import android.net.Uri
+import android.widget.Toast
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.layout.Arrangement
@@ -22,12 +23,12 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.Send
 import androidx.compose.material.icons.filled.Call
 import androidx.compose.material.icons.filled.ManageAccounts
 import androidx.compose.material.icons.filled.NotificationsActive
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.Security
-import androidx.compose.material.icons.filled.Send
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
@@ -78,6 +79,7 @@ import com.example.ui.components.formatCdf
 import com.example.ui.components.formatTimestamp
 import com.example.ui.state.GoPrimeViewModel
 import com.example.ui.state.UiState
+import com.example.util.WhatsAppIntentService
 
 @Composable
 fun AdminOrdersTab(
@@ -325,6 +327,27 @@ private fun AdminOrderManageDialog(
                             Spacer(Modifier.width(6.dp))
                             Text("Appeler le client")
                         }
+                        OutlinedButton(
+                            onClick = {
+                                WhatsAppIntentService.sendOrderDetailsToCustomerWhatsApp(
+                                    context = context,
+                                    order = order
+                                ).onFailure { err ->
+                                    Toast.makeText(
+                                        context,
+                                        err.localizedMessage ?: "Impossible d'ouvrir WhatsApp.",
+                                        Toast.LENGTH_SHORT
+                                    ).show()
+                                }
+                            },
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .testTag("admin_whatsapp_intent_${order.id}")
+                        ) {
+                            Icon(Icons.AutoMirrored.Filled.Send, null, Modifier.size(16.dp))
+                            Spacer(Modifier.width(6.dp))
+                            Text("Envoyer détails sur WhatsApp")
+                        }
                     }
                 }
 
@@ -406,6 +429,7 @@ fun AdminTeamAndIntegrationsTab(
     isDarkTheme: Boolean = false,
     onChangeThemeMode: (AppThemeMode) -> Unit = {}
 ) {
+    val context = LocalContext.current
     val users = (usersState as? UiState.Success)?.data.orEmpty()
     val orders = (ordersState as? UiState.Success)?.data.orEmpty()
     val settings = (whatsappSettingsState as? UiState.Success)?.data
@@ -596,7 +620,7 @@ fun AdminTeamAndIntegrationsTab(
                             enabled = !isBusy,
                             modifier = Modifier.weight(1f).testTag("test_whatsapp_button")
                         ) {
-                            Icon(Icons.Filled.Send, null, Modifier.size(16.dp))
+                            Icon(Icons.AutoMirrored.Filled.Send, null, Modifier.size(16.dp))
                             Spacer(Modifier.width(6.dp))
                             Text("Test Admin")
                         }
@@ -608,10 +632,37 @@ fun AdminTeamAndIntegrationsTab(
                             enabled = !isBusy,
                             modifier = Modifier.weight(1f).testTag("test_whatsapp_client_button")
                         ) {
-                            Icon(Icons.Filled.Send, null, Modifier.size(16.dp))
+                            Icon(Icons.AutoMirrored.Filled.Send, null, Modifier.size(16.dp))
                             Spacer(Modifier.width(6.dp))
                             Text("Test Client")
                         }
+                    }
+                    OutlinedButton(
+                        onClick = {
+                            val targetPhone = waPhonesInput.split(",")
+                                .firstOrNull()
+                                ?.trim()
+                                .orEmpty()
+                                .ifBlank { DEFAULT_ADMIN_WHATSAPP_PHONE }
+                            WhatsAppIntentService.openWhatsAppWithMessage(
+                                context = context,
+                                targetPhone = targetPhone,
+                                message = "🛍️ *Test GoPrime WhatsApp*\nL'envoi direct via Intent Android vers $targetPhone fonctionne correctement."
+                            ).onFailure { err ->
+                                Toast.makeText(
+                                    context,
+                                    err.localizedMessage ?: "Impossible d'ouvrir WhatsApp.",
+                                    Toast.LENGTH_SHORT
+                                ).show()
+                            }
+                        },
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .testTag("whatsapp_intent_direct_test_button")
+                    ) {
+                        Icon(Icons.AutoMirrored.Filled.Send, null, Modifier.size(16.dp))
+                        Spacer(Modifier.width(6.dp))
+                        Text("Ouvrir WhatsApp via Intent Android")
                     }
                 }
             }

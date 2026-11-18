@@ -17,6 +17,7 @@ import com.example.ui.components.formatCdf
 import com.example.ui.state.ActiveSpace
 import com.example.ui.state.CatalogSortOption
 import com.example.ui.state.GoPrimeViewModel
+import com.example.util.WhatsAppIntentService
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
@@ -270,5 +271,85 @@ class GoPrimeModelsTest {
         assertTrue(settings.enabled)
         assertTrue(settings.notifyCustomerOnOrder)
         assertEquals(listOf("+243974685125"), settings.adminWhatsappPhones)
+    }
+
+    @Test
+    fun `whatsapp intent service normalizes phones and builds encoded wa me url`() {
+        assertEquals("243974685125", WhatsAppIntentService.normalizePhoneForWhatsApp("243974685125"))
+        assertEquals("243974685125", WhatsAppIntentService.normalizePhoneForWhatsApp("+243 974 685 125"))
+        assertEquals("243974685125", WhatsAppIntentService.normalizePhoneForWhatsApp("0974685125"))
+        assertEquals("243974685125", WhatsAppIntentService.normalizePhoneForWhatsApp(""))
+        assertEquals("243974685125", WhatsAppIntentService.normalizePhoneForWhatsApp("123"))
+
+        val url = WhatsAppIntentService.buildWhatsAppUrl(
+            targetPhone = DEFAULT_ADMIN_WHATSAPP_PHONE,
+            message = "Bonjour GoPrime test"
+        )
+        assertEquals("https://wa.me/243974685125?text=Bonjour%20GoPrime%20test", url)
+    }
+
+    @Test
+    fun `whatsapp intent service builds complete order and checkout messages`() {
+        val order = Order(
+            id = "ord_42",
+            orderNumber = "GP-778899",
+            customerName = "Patrick",
+            customerPhone = "+243810001122",
+            districtName = "Gombe",
+            deliveryAddress = "Av. Tombalbaye 12",
+            fulfillmentMode = FulfillmentMode.DELIVERY.name,
+            paymentMethod = PaymentMethod.MOBILE_MONEY.name,
+            paymentProvider = "M-Pesa",
+            paymentReference = "TX9988",
+            paymentStatus = PaymentStatus.PAID.name,
+            status = OrderStatus.OUT_FOR_DELIVERY.name,
+            subtotalCdf = 28000L,
+            deliveryFeeCdf = 5000L,
+            totalCdf = 33000L,
+            notes = "Sonner au portail",
+            items = listOf(
+                mapOf(
+                    "productId" to "p1",
+                    "productName" to "Riz 5kg",
+                    "unitPriceCdf" to 28000L,
+                    "quantity" to 1L
+                )
+            )
+        )
+
+        val orderMsg = WhatsAppIntentService.buildOrderDetailsMessage(order)
+        assertTrue(orderMsg.contains("GP-778899"))
+        assertTrue(orderMsg.contains("Patrick"))
+        assertTrue(orderMsg.contains("+243810001122"))
+        assertTrue(orderMsg.contains("Gombe"))
+        assertTrue(orderMsg.contains("Av. Tombalbaye 12"))
+        assertTrue(orderMsg.contains("1× Riz 5kg"))
+        assertTrue(orderMsg.contains("M-Pesa"))
+        assertTrue(orderMsg.contains("TX9988"))
+        assertTrue(orderMsg.contains("Sonner au portail"))
+
+        val checkoutMsg = WhatsAppIntentService.buildCheckoutDetailsMessage(
+            customerName = "Sarah",
+            customerPhone = "0974685125",
+            fulfillmentMode = FulfillmentMode.PICKUP,
+            districtName = "Ngaliema",
+            deliveryAddress = "",
+            paymentMethod = PaymentMethod.CASH,
+            paymentProvider = "",
+            paymentPhone = "",
+            paymentReference = "",
+            notes = "",
+            cartItems = listOf(
+                CartItem(productId = "p2", productName = "Huile 1L", unitPriceCdf = 9500L, quantity = 2L)
+            ),
+            subtotalCdf = 19000L,
+            deliveryFeeCdf = 0L,
+            totalCdf = 19000L
+        )
+        assertTrue(checkoutMsg.contains("Nouvelle commande GoPrime"))
+        assertTrue(checkoutMsg.contains("Sarah"))
+        assertTrue(checkoutMsg.contains(FulfillmentMode.PICKUP.labelFr))
+        assertTrue(checkoutMsg.contains("2× Huile 1L"))
+        assertTrue(checkoutMsg.contains("Espèces"))
     }
 }
